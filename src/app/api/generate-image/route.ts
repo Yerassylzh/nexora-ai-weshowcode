@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenAI, Part } from '@google/genai';
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, style } = await request.json();
+    const { prompt, style, modifyPrompt, existingImage } = await request.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -11,65 +12,97 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.STABILITY_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
+      console.error('GEMINI_API_KEY is not set');
       return NextResponse.json(
-        { error: 'Stability API key not configured' },
+        { error: 'API key not configured' },
         { status: 500 }
       );
     }
 
+    const ai = new GoogleGenAI({ apiKey });
+
     let enhancedPrompt = prompt;
 
+    // Apply style enhancements
     if (style === 'Реализм') {
-      enhancedPrompt = `Cinematic, 8k, photorealistic, masterpiece, professional photography, ${prompt}`;
+      enhancedPrompt = `Cinematic, 8k, photorealistic, masterpiece, professional photography. ${prompt}`;
     } else if (style === 'Аниме') {
-      enhancedPrompt = `Anime style, vibrant colors, studio ghibli aesthetic, ${prompt}`;
+      enhancedPrompt = `Anime style, vibrant colors, studio ghibli aesthetic. ${prompt}`;
     } else if (style === '3D Рендер') {
-      enhancedPrompt = `3D render, octane render, unreal engine, highly detailed, ${prompt}`;
+      enhancedPrompt = `3D render, octane render, unreal engine, highly detailed. ${prompt}`;
     } else if (style === '2D Вектор') {
-      enhancedPrompt = `2D vector art, flat design, clean lines, modern illustration, ${prompt}`;
+      enhancedPrompt = `2D vector art, flat design, clean lines, modern illustration. ${prompt}`;
     } else if (style === 'Киберпанк') {
-      enhancedPrompt = `Cyberpunk aesthetic, neon lights, futuristic, dystopian, ${prompt}`;
+      enhancedPrompt = `Cyberpunk aesthetic, neon lights, futuristic, dystopian. ${prompt}`;
     } else if (style === 'ЧБ Нуар') {
-      enhancedPrompt = `Black and white, film noir, high contrast, dramatic shadows, ${prompt}`;
+      enhancedPrompt = `Black and white, film noir, high contrast, dramatic shadows. ${prompt}`;
     }
 
-    const formData = new FormData();
-    formData.append('prompt', enhancedPrompt);
-    formData.append('output_format', 'png');
-    formData.append('aspect_ratio', '16:9');
+    // If modification is requested, append it
+    if (modifyPrompt) {
+      enhancedPrompt = `Modify this image: ${modifyPrompt}`;
+    }
 
-    const response = await fetch(
-      'https://api.stability.ai/v2beta/stable-image/generate/core',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Accept': 'image/*',
+    // const chat = ai.chats.create({
+    //   model: 'gemini-3-pro-image-preview',
+    //   config: {
+    //     responseModalities: ['IMAGE'],
+    //     tools: [{googleSearch: {}}],
+    //   },
+    // });
+
+    // Build message with existing image if provided
+    let messageContent: any = { message: enhancedPrompt };
+    
+    if (existingImage) {
+      // Extract base64 data from data URL
+      const base64Data = existingImage.split(',')[1];
+      const mimeType = existingImage.split(':')[1].split(';')[0];
+      
+      messageContent = {
+        message: enhancedPrompt,
+        image: {
+          mimeType,
+          data: base64Data,
         },
-        body: formData,
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Stability API error:', errorText);
-      return NextResponse.json(
-        { error: 'Failed to generate image' },
-        { status: response.status }
-      );
+      };
     }
 
-    const imageBuffer = await response.arrayBuffer();
-    const base64Image = Buffer.from(imageBuffer).toString('base64');
-    const imageUrl = `data:image/png;base64,${base64Image}`;
+    // const response = await chat.sendMessage(messageContent);
 
-    return NextResponse.json({ imageUrl });
-  } catch (error) {
+    // console.log(await ai.models.list())
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash-lite",
+      contents: prompt,
+    });
+
+    // Extract image from response
+    if (response.candidates && response.candidates[0]) {
+      const parts = response.candidates[0].content?.parts as Part[];
+      
+      for (const part of parts) {
+        if (part.inlineData) {
+          const imageData = part.inlineData.data;
+          const mimeType = part.inlineData.mimeType || 'image/png';
+          const imageUrl = `data:${mimeType};base64,${imageData}`;
+          return NextResponse.json({ imageUrl });
+        }
+      }
+    }
+
+    // Fallback: If no image in response
+    console.error('No image data in response');
+    return NextResponse.json(
+      { error: 'No image generated' },
+      { status: 500 }
+    );
+  } catch (error: any) {
     console.error('Error generating image:', error);
     return NextResponse.json(
-      { error: 'Failed to generate image' },
+      { error: error.message || 'Failed to generate image' },
       { status: 500 }
     );
   }

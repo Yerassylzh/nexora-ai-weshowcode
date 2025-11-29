@@ -4,29 +4,74 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
 import { generateImage } from '@/lib/api';
-import StoryboardCard from '@/components/StoryboardCard';
+import { MOCK_OUTLINES } from '@/lib/mockData';
+import GeneratingScreen from '@/components/GeneratingScreen';
 import { Scene, ActiveTab } from '@/types';
-import { ChevronLeft, Sparkles, Download, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, Download, Plus, Trash2, RefreshCw, Edit3, Wand2 } from 'lucide-react';
+
+const SCENE_OPTIONS = [3, 5, 10];
+const STYLE_OPTIONS = ['Реализм', 'Аниме', 'Киберпанк', 'ЧБ Нуар', '3D Рендер', '2D Вектор'];
 
 export default function StudioPage() {
   const router = useRouter();
-  const { projectData, updateScene, addScene, removeScene } = useProject();
+  const { projectData, setProjectData, updateScene, addScene, removeScene } = useProject();
   
   const [activeTab, setActiveTab] = useState<ActiveTab>('standard');
   const [viewMode, setViewMode] = useState<'outline' | 'storyboard'>('outline');
+  const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
+  
+  // Regeneration settings
+  const [regTopic, setRegTopic] = useState('');
+  const [regSceneCount, setRegSceneCount] = useState(3);
+  const [regStyle, setRegStyle] = useState('Реализм');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Edit states
+  const [isEditingText, setIsEditingText] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedDescription, setEditedDescription] = useState('');
+  const [modifyPrompt, setModifyPrompt] = useState('');
+  const [showModifyInput, setShowModifyInput] = useState(false);
 
   useEffect(() => {
     if (!projectData) {
       router.push('/');
+    } else {
+      setRegTopic(projectData.topic);
+      setRegSceneCount(projectData.sceneCount);
+      setRegStyle(projectData.style);
+      setHasUnsavedChanges(false);
     }
   }, [projectData, router]);
+
+  useEffect(() => {
+    if (projectData) {
+      const changed = 
+        regTopic !== projectData.topic ||
+        regSceneCount !== projectData.sceneCount ||
+        regStyle !== projectData.style;
+      setHasUnsavedChanges(changed);
+    }
+  }, [regTopic, regSceneCount, regStyle, projectData]);
+
+  useEffect(() => {
+    if (currentScene) {
+      setEditedTitle(currentScene.title);
+      setEditedDescription(currentScene.description);
+      setIsEditingText(false);
+      setModifyPrompt('');
+      setShowModifyInput(false);
+    }
+  }, [currentSceneIndex, activeTab]);
 
   if (!projectData) {
     return null;
   }
 
   const currentScenes = projectData[activeTab];
+  const currentScene = currentScenes[currentSceneIndex];
 
   const handleUpdateScene = (data: { id: string; field: keyof Scene; value: string }) => {
     updateScene(activeTab, data.id, { [data.field]: data.value });
@@ -45,17 +90,49 @@ export default function StudioPage() {
     addScene(activeTab, newScene);
   };
 
+  const handleRegenerate = async () => {
+    setIsGenerating(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const data = {
+        topic: regTopic,
+        style: regStyle,
+        sceneCount: regSceneCount,
+        standard: MOCK_OUTLINES.standard.slice(0, regSceneCount),
+        experimental: MOCK_OUTLINES.experimental.slice(0, regSceneCount),
+      };
+      setProjectData(data);
+      setHasUnsavedChanges(false);
+    } catch (error) {
+      console.error('Failed to regenerate outline:', error);
+      alert('Не удалось перегенерировать план.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleGenerateVisuals = async () => {
+    if (hasUnsavedChanges) {
+      alert('У вас есть несохраненные изменения в настройках. Пожалуйста, нажмите кнопку "Обновить" перед генерацией кадров.');
+      return;
+    }
+
     setViewMode('storyboard');
     setIsGenerating(true);
 
+    // Generate images for both modes
+    const allScenes = [...projectData.standard, ...projectData.experimental];
+    setGenerationProgress({ current: 0, total: allScenes.length });
+
+    let currentIndex = 0;
+
     for (const mode of ['standard', 'experimental'] as const) {
       const scenes = projectData[mode];
-
       for (const scene of scenes) {
         if (!scene.imageUrl && !scene.isLoading) {
+          setGenerationProgress({ current: currentIndex + 1, total: allScenes.length });
           updateScene(mode, scene.id, { isLoading: true });
-
+          
           try {
             const { imageUrl } = await generateImage(scene.visualPrompt, projectData.style);
             updateScene(mode, scene.id, { imageUrl, isLoading: false });
@@ -63,27 +140,80 @@ export default function StudioPage() {
             console.error(`Failed to generate image for scene ${scene.id}:`, error);
             updateScene(mode, scene.id, { isLoading: false });
           }
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          currentIndex++;
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
     }
 
     setIsGenerating(false);
+    setGenerationProgress({ current: 0, total: 0 });
   };
 
-  const handleRegenerate = async (sceneId: string) => {
-    const scene = currentScenes.find(s => s.id === sceneId);
-    if (!scene) return;
-
-    updateScene(activeTab, sceneId, { isLoading: true });
-
+  const handleRegenerateImage = async () => {
+    if (!currentScene) return;
+    
+    updateScene(activeTab, currentScene.id, { isLoading: true });
+    
     try {
-      const { imageUrl } = await generateImage(scene.visualPrompt, projectData.style);
-      updateScene(activeTab, sceneId, { imageUrl, isLoading: false });
+      const { imageUrl } = await generateImage(currentScene.visualPrompt, projectData.style);
+      updateScene(activeTab, currentScene.id, { 
+        imageUrl,
+        isLoading: false 
+      });
     } catch (error) {
       console.error('Failed to regenerate image:', error);
-      updateScene(activeTab, sceneId, { isLoading: false });
+      updateScene(activeTab, currentScene.id, { isLoading: false });
+    }
+  };
+
+  const handleUpdateTextAndImage = async () => {
+    if (!currentScene) return;
+
+    // Update text
+    updateScene(activeTab, currentScene.id, { 
+      title: editedTitle,
+      description: editedDescription,
+      visualPrompt: editedDescription, // Use description as new visual prompt
+      isLoading: true 
+    });
+    
+    setIsEditingText(false);
+
+    try {
+      const { imageUrl } = await generateImage(editedDescription, projectData.style);
+      updateScene(activeTab, currentScene.id, { 
+        imageUrl,
+        isLoading: false 
+      });
+    } catch (error) {
+      console.error('Failed to update image:', error);
+      updateScene(activeTab, currentScene.id, { isLoading: false });
+    }
+  };
+
+  const handleModifyImage = async () => {
+    if (!currentScene || !modifyPrompt.trim()) return;
+
+    updateScene(activeTab, currentScene.id, { isLoading: true });
+    setShowModifyInput(false);
+    
+    try {
+      // Pass existing image and modification prompt
+      const { imageUrl } = await generateImage(
+        modifyPrompt, 
+        projectData.style, 
+        currentScene.imageUrl // Pass existing image for modification
+      );
+      updateScene(activeTab, currentScene.id, { 
+        imageUrl,
+        isLoading: false 
+      });
+      setModifyPrompt('');
+    } catch (error) {
+      console.error('Failed to modify image:', error);
+      updateScene(activeTab, currentScene.id, { isLoading: false });
     }
   };
 
@@ -98,21 +228,38 @@ export default function StudioPage() {
     URL.revokeObjectURL(url);
   };
 
+  const nextScene = () => {
+    setCurrentSceneIndex((prev) => (prev + 1) % currentScenes.length);
+  };
+
+  const prevScene = () => {
+    setCurrentSceneIndex((prev) => (prev - 1 + currentScenes.length) % currentScenes.length);
+  };
+
+  // Show generating screen
+  if (isGenerating && viewMode === 'storyboard' && generationProgress.total > 0) {
+    return (
+      <GeneratingScreen 
+        currentScene={generationProgress.current}
+        totalScenes={generationProgress.total}
+        mode={activeTab}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white flex flex-col">
       {/* Sticky Header */}
       <header className="sticky top-0 z-20 bg-[#0A0A0A]/90 backdrop-blur-md border-b border-neutral-800 p-3 md:p-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto gap-2">
-          {/* Left: Back Button */}
           <button
-            onClick={() => router.push('/')}
+            onClick={() => viewMode === 'storyboard' ? setViewMode('outline') : router.push('/')}
             className="flex items-center gap-1 md:gap-2 text-neutral-400 hover:text-white transition-colors text-sm md:text-base"
           >
             <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
             <span className="hidden sm:inline">Назад</span>
           </button>
 
-          {/* Center: Tab Switcher */}
           <div className="flex bg-neutral-800 rounded-lg p-0.5 md:p-1 text-xs md:text-sm font-medium">
             <button
               onClick={() => setActiveTab('standard')}
@@ -132,12 +279,11 @@ export default function StudioPage() {
                   : 'text-neutral-400 hover:text-white'
               }`}
             >
-              Эксп.
-              <span className="hidden md:inline">ериментальный</span>
+              <span className="md:hidden">Эксп</span>
+              <span className="hidden md:inline">Экспериментальный</span>
             </button>
           </div>
 
-          {/* Right: Action Button */}
           <div>
             {viewMode === 'outline' ? (
               <button
@@ -165,88 +311,291 @@ export default function StudioPage() {
       {/* Main Content */}
       <main className="flex-grow w-full p-4 md:p-8">
         {viewMode === 'outline' ? (
-          /* Outline Editor View - HORIZONTAL SCROLL */
-          <div className="space-y-4 md:space-y-6">
-            <div className="flex items-center justify-between mb-4 md:mb-8 max-w-7xl mx-auto">
+          /* Outline Editor View */
+          <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl md:text-2xl font-bold">Редактор Структуры</h2>
               <span className="text-sm md:text-base text-neutral-400">Сцены: {currentScenes.length}</span>
             </div>
 
-            {/* Horizontal Scrollable Container */}
-            <div className="relative">
-              <div className="flex gap-4 md:gap-6 overflow-x-auto pb-4 px-4 md:px-0" style={{ scrollSnapType: 'x mandatory' }}>
-                {currentScenes.map((scene, index) => (
-                  <div
-                    key={scene.id}
-                    className="flex-shrink-0 w-72 md:w-80 bg-[#171717] rounded-xl p-4 md:p-6 border border-neutral-800 hover:border-neutral-700 transition-all relative"
-                    style={{ scrollSnapAlign: 'start' }}
+            {/* Regeneration Controls */}
+            <div className="bg-[#171717] border border-neutral-800 rounded-xl p-4 md:p-6 mb-6">
+              <div className="flex flex-col md:flex-row items-start md:items-end gap-3 md:gap-4">
+                <div className="flex-grow w-full">
+                  <label className="block text-xs text-neutral-400 mb-2">Тема</label>
+                  <input
+                    value={regTopic}
+                    onChange={(e) => setRegTopic(e.target.value)}
+                    placeholder="Введите тему для генерации сцен"
+                    className="w-full px-3 py-2 bg-[#0A0A0A] border border-neutral-700 rounded-lg text-sm text-white focus:border-[#3B82F6] outline-none transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-2">Количество сцен:</label>
+                  <select
+                    value={regSceneCount}
+                    onChange={(e) => setRegSceneCount(Number(e.target.value))}
+                    className="px-3 py-2 bg-[#0A0A0A] border border-neutral-700 rounded-lg text-sm text-white focus:border-[#3B82F6] outline-none"
                   >
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => removeScene(activeTab, scene.id)}
-                      className="absolute top-2 right-2 text-neutral-500 hover:text-red-500 transition-colors p-1"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {SCENE_OPTIONS.map((count) => (
+                      <option key={count} value={count}>{count}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-2">Стиль:</label>
+                  <select
+                    value={regStyle}
+                    onChange={(e) => setRegStyle(e.target.value)}
+                    className="px-3 py-2 bg-[#0A0A0A] border border-neutral-700 rounded-lg text-sm text-white focus:border-[#3B82F6] outline-none"
+                  >
+                    {STYLE_OPTIONS.map((style) => (
+                      <option key={style} value={style}>{style}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleRegenerate}
+                  disabled={isGenerating || !regTopic.trim() || !hasUnsavedChanges}
+                  className="px-6 py-2 bg-[#3B82F6] text-white rounded-lg hover:bg-[#60A5FA] transition-colors disabled:opacity-50 text-sm font-medium whitespace-nowrap"
+                >
+                  {isGenerating ? 'Генерация...' : 'Обновить'}
+                </button>
+              </div>
+            </div>
 
-                    {/* Editable Content */}
-                    <div className="space-y-4">
+            {/* Vertical Scene Cards */}
+            <div className="space-y-4">
+              {currentScenes.map((scene, index) => (
+                <div
+                  key={scene.id}
+                  className="bg-neutral-900 rounded-xl p-4 md:p-6 border border-neutral-800 hover:border-neutral-700 transition-all"
+                >
+                  <div className="flex items-start gap-4 md:gap-6">
+                    <div className="text-4xl md:text-5xl font-bold text-neutral-700 w-12 md:w-16 flex-shrink-0">
+                      {String(index + 1).padStart(2, '0')}
+                    </div>
+
+                    <div className="flex-grow space-y-3 md:space-y-4">
                       <input
                         value={scene.title}
                         onChange={(e) => handleUpdateScene({ id: scene.id, field: 'title', value: e.target.value })}
                         placeholder="Заголовок сцены"
-                        className="w-full text-lg md:text-xl font-semibold bg-transparent border-b-2 border-neutral-800 focus:border-[#3B82F6] outline-none pb-2 transition text-white"
+                        className="w-full text-lg md:text-2xl font-semibold bg-transparent border-b-2 border-neutral-800 focus:border-[#3B82F6] outline-none pb-2 transition text-white"
                       />
                       <textarea
                         value={scene.description}
                         onChange={(e) => handleUpdateScene({ id: scene.id, field: 'description', value: e.target.value })}
                         placeholder="Описание сцены..."
-                        rows={5}
-                        className="w-full text-sm text-neutral-400 bg-transparent outline-none resize-none"
+                        rows={3}
+                        className="w-full text-sm md:text-base text-neutral-400 bg-transparent outline-none resize-none"
                       />
                     </div>
-                  </div>
-                ))}
 
-                {/* Add Scene Button */}
-                <button
-                  onClick={handleAddScene}
-                  className="flex-shrink-0 w-72 md:w-80 h-64 border-2 border-dashed border-neutral-700 rounded-xl text-neutral-400 hover:border-[#3B82F6] hover:text-[#3B82F6] transition-all flex flex-col items-center justify-center gap-2 text-base md:text-lg"
-                  style={{ scrollSnapAlign: 'start' }}
-                >
-                  <Plus className="w-6 h-6 md:w-8 md:h-8" />
-                  <span>Добавить Сцену</span>
-                </button>
-              </div>
+                    <button
+                      onClick={() => removeScene(activeTab, scene.id)}
+                      className="text-neutral-500 hover:text-red-500 transition-colors p-1"
+                    >
+                      <Trash2 className="w-4 h-4 md:w-5 md:h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={handleAddScene}
+                className="w-full py-4 md:py-6 border-2 border-dashed border-neutral-700 rounded-xl text-neutral-400 hover:border-[#3B82F6] hover:text-[#3B82F6] transition-all flex items-center justify-center gap-2 text-base md:text-lg"
+              >
+                <Plus className="w-5 h-5 md:w-6 md:h-6" />
+                <span>Добавить сцену</span>
+              </button>
             </div>
           </div>
         ) : (
-          /* Storyboard Grid View */
-          <div className="space-y-4 md:space-y-6 max-w-7xl mx-auto">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4 md:mb-8">
+          /* Storyboard - ENHANCED FULLSCREEN VIEW WITH EDITING */
+          <div className="max-w-6xl mx-auto h-full flex flex-col">
+            <div className="flex items-center justify-between mb-4 md:mb-6">
               <h2 className="text-xl md:text-2xl font-bold">Студия раскадровки</h2>
               <p className="text-xs md:text-sm text-neutral-400">
-                <span className="hidden sm:inline">Тема: {projectData.topic} • </span>
-                Стиль: {projectData.style}
+                {currentSceneIndex + 1} / {currentScenes.length}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-              {currentScenes.map((scene) => (
-                <StoryboardCard
-                  key={scene.id}
-                  scene={scene}
-                  onRegenerate={handleRegenerate}
-                  style={projectData.style}
-                />
-              ))}
-            </div>
+            {currentScene && (
+              <div className="flex-grow flex flex-col bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800">
+                {/* Image Section with Controls */}
+                <div className="relative w-full aspect-video bg-[#171717] flex items-center justify-center group">
+                  {currentScene.isLoading ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 border-4 border-[#3B82F6] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-neutral-400 text-sm">Генерация изображения...</span>
+                    </div>
+                  ) : currentScene.imageUrl ? (
+                    <>
+                      <img
+                        src={currentScene.imageUrl}
+                        alt={currentScene.title}
+                        className="w-full h-full object-cover"
+                      />
+                      
+                      {/* Hover Controls */}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                        <button
+                          onClick={handleRegenerateImage}
+                          className="px-4 py-2 bg-neutral-800/90 hover:bg-neutral-700 text-white rounded-lg transition-colors flex items-center gap-2 text-sm"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Перегенерировать
+                        </button>
+                        <button
+                          onClick={() => setShowModifyInput(!showModifyInput)}
+                          className="px-4 py-2 bg-[#3B82F6]/90 hover:bg-[#60A5FA] text-white rounded-lg transition-colors flex items-center gap-2 text-sm"
+                        >
+                          <Wand2 className="w-4 h-4" />
+                          Изменить
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-neutral-600 text-lg">Нет изображения</span>
+                  )}
 
-            {isGenerating && (
-              <div className="mt-8 text-center">
-                <div className="inline-flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2 md:py-3 bg-neutral-900 rounded-lg border border-neutral-800 text-sm md:text-base">
-                  <div className="w-4 h-4 md:w-5 md:h-5 border-2 border-[#3B82F6] border-t-transparent rounded-full animate-spin" />
-                  <span className="text-neutral-300">Генерация изображений...</span>
+                  {/* Modify Prompt Overlay */}
+                  {showModifyInput && (
+                    <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/90 to-transparent">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={modifyPrompt}
+                          onChange={(e) => setModifyPrompt(e.target.value)}
+                          placeholder="Опишите изменения (напр., 'сделать небо более драматичным')..."
+                          className="flex-1 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm text-white placeholder-neutral-500 focus:border-[#3B82F6] outline-none"
+                          onKeyPress={(e) => e.key === 'Enter' && handleModifyImage()}
+                        />
+                        <button
+                          onClick={handleModifyImage}
+                          disabled={!modifyPrompt.trim()}
+                          className="px-4 py-2 bg-[#3B82F6] hover:bg-[#60A5FA] text-white rounded-lg transition-colors disabled:opacity-50 text-sm font-medium"
+                        >
+                          Применить
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content Section with Edit */}
+                <div className="flex-grow p-6 md:p-8 overflow-y-auto">
+                  <div className="flex items-start justify-between mb-4">
+                    {isEditingText ? (
+                      <input
+                        value={editedTitle}
+                        onChange={(e) => setEditedTitle(e.target.value)}
+                        className="flex-1 text-2xl md:text-3xl font-bold bg-transparent border-b-2 border-[#3B82F6] outline-none pb-2"
+                      />
+                    ) : (
+                      <h3 className="text-2xl md:text-3xl font-bold">{currentScene.title}</h3>
+                    )}
+                    
+                    {!isEditingText && (
+                      <button
+                        onClick={() => setIsEditingText(true)}
+                        className="ml-4 p-2 text-neutral-500 hover:text-[#3B82F6] transition-colors"
+                      >
+                        <Edit3 className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Tags */}
+                  {currentScene.tags && currentScene.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {currentScene.tags.map((tag, idx) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 bg-[#3B82F6]/20 text-[#3B82F6] rounded-full text-xs font-medium border border-[#3B82F6]/30"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {isEditingText ? (
+                    <>
+                      <textarea
+                        value={editedDescription}
+                        onChange={(e) => setEditedDescription(e.target.value)}
+                        rows={4}
+                        className="w-full text-base md:text-lg mb-6 bg-neutral-800 border border-neutral-700 rounded-lg p-3 outline-none focus:border-[#3B82F6] transition resize-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleUpdateTextAndImage}
+                          className="px-6 py-2 bg-[#3B82F6] hover:bg-[#60A5FA] text-white rounded-lg transition-colors text-sm font-medium"
+                        >
+                          Обновить и перегенерировать
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsEditingText(false);
+                            setEditedTitle(currentScene.title);
+                            setEditedDescription(currentScene.description);
+                          }}
+                          className="px-6 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg transition-colors text-sm font-medium"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-neutral-300 text-base md:text-lg mb-6 leading-relaxed">
+                        {currentScene.description}
+                      </p>
+
+                      {/* Director's Note */}
+                      {currentScene.directorsNote && (
+                        <div className="border-l-4 border-[#3B82F6] pl-4 py-2">
+                          <p className="text-xs text-neutral-500 uppercase mb-1">Заметка режиссера</p>
+                          <p className="text-sm md:text-base text-neutral-400 italic">
+                            {currentScene.directorsNote}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Navigation */}
+                <div className="flex items-center justify-between p-4 md:p-6 border-t border-neutral-800">
+                  <button
+                    onClick={prevScene}
+                    className="flex items-center gap-2 px-4 md:px-6 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="hidden md:inline">Предыдущая</span>
+                  </button>
+                  
+                  <div className="flex gap-1">
+                    {currentScenes.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentSceneIndex(idx)}
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          idx === currentSceneIndex ? 'bg-[#3B82F6] w-6' : 'bg-neutral-700'
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={nextScene}
+                    className="flex items-center gap-2 px-4 md:px-6 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors"
+                  >
+                    <span className="hidden md:inline">Следующая</span>
+                    <ChevronRight className="w-4 h-4 md:w-5 md:h-5" />
+                  </button>
                 </div>
               </div>
             )}
