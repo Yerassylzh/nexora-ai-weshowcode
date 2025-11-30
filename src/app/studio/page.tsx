@@ -76,6 +76,7 @@ export default function StudioPage() {
     return null;
   }
 
+  // For handlers that need current scenes
   const currentScenes = projectData[activeTab];
   const currentScene = currentScenes[currentSceneIndex];
 
