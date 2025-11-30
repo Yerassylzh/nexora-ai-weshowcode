@@ -544,7 +544,7 @@ This archive contains:
                   ) : currentScene.imageUrl ? (
                     <>
                       <DelayedImage
-                        key={`${activeTab}-${currentScene.id}-${currentScene.imageUrl}`}
+                        key={currentScene.imageUrl}
                         src={currentScene.imageUrl}
                         alt={currentScene.title}
                         className="w-full h-full object-cover"

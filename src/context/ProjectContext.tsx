@@ -23,12 +23,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   ) => {
     if (!projectData) return;
 
-    setProjectData({
+    console.log('🔄 updateScene called:', { mode, sceneId, updates });
+
+    const newProjectData = {
       ...projectData,
       [mode]: projectData[mode].map(scene =>
         scene.id === sceneId ? { ...scene, ...updates } : scene
       ),
-    });
+    };
+
+    console.log('💾 Calling setProjectData with:', newProjectData[mode].find(s => s.id === sceneId));
+    setProjectData(newProjectData);
   };
 
   const addScene = (mode: 'standard' | 'experimental', scene: Scene) => {
