@@ -76,9 +76,9 @@ export default function StudioPage() {
     return null;
   }
 
-  // For handlers that need current scenes
-  const currentScenes = projectData[activeTab];
-  const currentScene = currentScenes[currentSceneIndex];
+  // CRITICAL: Recalculate on EVERY change using useMemo
+  const currentScenes = React.useMemo(() => projectData[activeTab], [projectData, activeTab]);
+  const currentScene = React.useMemo(() => currentScenes[currentSceneIndex], [currentScenes, currentSceneIndex]);
 
   const handleUpdateScene = (data: { id: string; field: keyof Scene; value: string }) => {
     updateScene(activeTab, data.id, { [data.field]: data.value });
