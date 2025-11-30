@@ -56,64 +56,22 @@ export default function HomePage() {
     try {
       if (file.name.endsWith('.zip')) {
         // Handle ZIP import
-        const JSZip = (await import('jszip')).default;
-        const zip = await JSZip.loadAsync(file);
+        const { extractProjectZip } = await import('@/lib/utils/zipImport');
+        const projectMeta = await extractProjectZip(file);
         
-        // Read project.json
-        const projectFile = zip.file('project.json');
-        if (!projectFile) {
-          throw new Error('Invalid ZIP: project.json not found');
-        }
-        
-        const projectJson = await projectFile.async('text');
-        const projectMeta = JSON.parse(projectJson);
-        
-        // Helper to convert blob to data URL
-        const blobToDataURL = (blob: Blob): Promise<string> => {
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        };
-        
-        // Load images for both modes
-        const loadImages = async (mode: 'standard' | 'experimental') => {
-          const scenes = projectMeta[mode];
-          for (let i = 0; i < scenes.length; i++) {
-            const imagePath = `${mode}/scene-${String(i + 1).padStart(2, '0')}.jpg`;
-            const imageFile = zip.file(imagePath);
-            if (imageFile) {
-              const blob = await imageFile.async('blob');
-              const dataURL = await blobToDataURL(blob);
-              scenes[i].imageUrl = dataURL;
-              scenes[i].id = `${Date.now()}-${i}`;
-              scenes[i].isLoading = false;
-            } else {
-              scenes[i].imageUrl = null;
-              scenes[i].id = `${Date.now()}-${i}`;
-              scenes[i].isLoading = false;
-            }
-          }
-        };
-        
-        await loadImages('standard');
-        await loadImages('experimental');
-        
-        // Set project data and navigate to storyboard view
         setProjectData(projectMeta);
         router.push('/studio?view=storyboard');
         
       } else {
         // Handle JSON import (backward compatibility)
+        const { isValidProjectData } = await import('@/lib/utils/zipImport');
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
             const content = e.target?.result as string;
             const data = JSON.parse(content);
             
-            if (data.topic && data.style && data.standard && data.experimental) {
+            if (isValidProjectData(data)) {
               setProjectData(data);
               router.push('/studio?view=storyboard');
             } else {

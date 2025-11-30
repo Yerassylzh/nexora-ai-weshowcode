@@ -99,19 +99,27 @@ export default function StudioPage() {
   const handleRegenerate = async () => {
     setIsGenerating(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const data = {
-        topic: regTopic,
-        style: regStyle,
-        sceneCount: regSceneCount,
-        standard: MOCK_OUTLINES.standard.slice(0, regSceneCount),
-        experimental: MOCK_OUTLINES.experimental.slice(0, regSceneCount),
-      };
+      // Call the real API to generate outline
+      const response = await fetch('/api/generate-outline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: regTopic,
+          sceneCount: regSceneCount,
+          style: regStyle,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate outline');
+      }
+
+      const data = await response.json();
       setProjectData(data);
       setHasUnsavedChanges(false);
     } catch (error) {
       console.error('Failed to regenerate outline:', error);
-      alert('Не удалось перегенерировать план.');
+      alert('Не удалось перегенерировать план. Проверьте консоль для деталей.');
     } finally {
       setIsGenerating(false);
     }
@@ -123,8 +131,8 @@ export default function StudioPage() {
       return;
     }
 
-    setViewMode('storyboard');
     setIsGenerating(true);
+    setViewMode('storyboard');
 
     // Generate images for BOTH standard and experimental modes
     const allScenes = [...projectData.standard, ...projectData.experimental];
@@ -136,7 +144,8 @@ export default function StudioPage() {
       const scenes = projectData[mode];
       for (const scene of scenes) {
         if (!scene.imageUrl && !scene.isLoading) {
-          setGenerationProgress({ current: currentIndex + 1, total: allScenes.length });
+          currentIndex++;
+          setGenerationProgress({ current: currentIndex, total: allScenes.length });
           updateScene(mode, scene.id, { isLoading: true });
           
           try {
@@ -147,7 +156,6 @@ export default function StudioPage() {
             updateScene(mode, scene.id, { isLoading: false });
           }
           
-          currentIndex++;
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
@@ -397,14 +405,14 @@ This archive contains:
       <main className="flex-grow w-full p-4 md:p-8">
         {viewMode === 'outline' ? (
           /* Outline Editor View */
-          <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl md:text-2xl font-bold">Редактор Структуры</h2>
-              <span className="text-sm md:text-base text-neutral-400">Сцены: {currentScenes.length}</span>
+          <div className="max-w-6xl mx-auto space-y-3 md:space-y-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg md:text-xl font-bold">Редактор Структуры</h2>
+              <span className="text-xs md:text-sm text-neutral-400">Сцены: {currentScenes.length}</span>
             </div>
 
             {/* Regeneration Controls */}
-            <div className="bg-[#171717] border border-neutral-800 rounded-xl p-4 md:p-6 mb-6">
+            <div className="bg-[#171717] border border-neutral-800 rounded-lg p-3 md:p-4 mb-4">
               <div className="flex flex-col md:flex-row items-start md:items-end gap-3 md:gap-4">
                 <div className="flex-grow w-full">
                   <label className="block text-xs text-neutral-400 mb-2">Тема</label>
@@ -467,23 +475,23 @@ This archive contains:
             </div>
 
             {/* Vertical Scene Cards */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               {currentScenes.map((scene, index) => (
                 <div
                   key={scene.id}
-                  className="bg-neutral-900 rounded-xl p-4 md:p-6 border border-neutral-800 hover:border-neutral-700 transition-all"
+                  className="bg-neutral-900 rounded-lg p-3 md:p-4 border border-neutral-800 hover:border-neutral-700 transition-all"
                 >
-                  <div className="flex items-start gap-4 md:gap-6">
-                    <div className="text-4xl md:text-5xl font-bold text-neutral-700 w-12 md:w-16 flex-shrink-0">
+                  <div className="flex items-start gap-3 md:gap-4">
+                    <div className="text-3xl md:text-4xl font-bold text-neutral-700 w-10 md:w-12 flex-shrink-0">
                       {String(index + 1).padStart(2, '0')}
                     </div>
 
-                    <div className="flex-grow space-y-3 md:space-y-4">
+                    <div className="flex-grow space-y-2 md:space-y-3">
                       <input
                         value={scene.title}
                         onChange={(e) => handleUpdateScene({ id: scene.id, field: 'title', value: e.target.value })}
                         placeholder="Заголовок сцены"
-                        className="w-full text-lg md:text-2xl font-semibold bg-transparent border-b-2 border-neutral-800 focus:border-[#3B82F6] outline-none pb-2 transition text-white"
+                        className="w-full text-base md:text-lg font-semibold bg-transparent border-b-2 border-neutral-800 focus:border-[#3B82F6] outline-none pb-1 transition text-white"
                       />
                       <textarea
                         value={scene.description}
@@ -506,7 +514,7 @@ This archive contains:
 
               <button
                 onClick={handleAddScene}
-                className="w-full py-4 md:py-6 border-2 border-dashed border-neutral-700 rounded-xl text-neutral-400 hover:border-[#3B82F6] hover:text-[#3B82F6] transition-all flex items-center justify-center gap-2 text-base md:text-lg"
+                className="w-full py-3 md:py-4 border-2 border-dashed border-neutral-700 rounded-lg text-neutral-400 hover:border-[#3B82F6] hover:text-[#3B82F6] transition-all flex items-center justify-center gap-2 text-sm md:text-base"
               >
                 <Plus className="w-5 h-5 md:w-6 md:h-6" />
                 <span>Добавить сцену</span>
@@ -515,21 +523,21 @@ This archive contains:
           </div>
         ) : (
           /* Storyboard - ENHANCED FULLSCREEN VIEW WITH EDITING */
-          <div className="max-w-6xl mx-auto h-full flex flex-col">
-            <div className="flex items-center justify-between mb-4 md:mb-6">
-              <h2 className="text-xl md:text-2xl font-bold">Студия раскадровки</h2>
-              <p className="text-xs md:text-sm text-neutral-400">
+          <div className="max-w-5xl mx-auto h-full flex flex-col">
+            <div className="flex items-center justify-between mb-3 md:mb-4">
+              <h2 className="text-lg md:text-xl font-bold">Студия раскадровки</h2>
+              <p className="text-xs text-neutral-400">
                 {currentSceneIndex + 1} / {currentScenes.length}
               </p>
             </div>
 
             {currentScene && (
-              <div className="flex-grow flex flex-col bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800">
+              <div className="flex-grow flex flex-col bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800">
                 {/* Image Section with Controls */}
                 <div className="relative w-full aspect-video bg-[#171717] flex items-center justify-center group">
                   {currentScene.isLoading ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-12 h-12 border-4 border-[#3B82F6] border-t-transparent rounded-full animate-spin" />
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-10 h-10 border-4 border-[#3B82F6] border-t-transparent rounded-full animate-spin" />
                       <span className="text-neutral-400 text-sm">Генерация изображения...</span>
                     </div>
                   ) : currentScene.imageUrl ? (
@@ -588,16 +596,16 @@ This archive contains:
                 </div>
 
                 {/* Content Section with Edit */}
-                <div className="flex-grow p-6 md:p-8 overflow-y-auto">
+                <div className="flex-grow p-4 md:p-6 overflow-y-auto">
                   <div className="flex items-start justify-between mb-4">
                     {isEditingText ? (
                       <input
                         value={editedTitle}
                         onChange={(e) => setEditedTitle(e.target.value)}
-                        className="flex-1 text-2xl md:text-3xl font-bold bg-transparent border-b-2 border-[#3B82F6] outline-none pb-2"
+                        className="flex-1 text-xl md:text-2xl font-bold bg-transparent border-b-2 border-[#3B82F6] outline-none pb-2"
                       />
                     ) : (
-                      <h3 className="text-2xl md:text-3xl font-bold">{currentScene.title}</h3>
+                      <h3 className="text-xl md:text-2xl font-bold">{currentScene.title}</h3>
                     )}
                     
                     {!isEditingText && (
