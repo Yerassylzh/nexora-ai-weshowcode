@@ -20,16 +20,32 @@ export default function DelayedImage({
   const [retryCount, setRetryCount] = useState(0);
   const [error, setError] = useState(false);
 
+  // Reset state when src changes
   useEffect(() => {
-    if (!src) return;
+    console.log('🖼️ DelayedImage src changed, resetting state:', src);
+    setImageSrc(null);
+    setIsLoading(true);
+    setRetryCount(0);
+    setError(false);
+  }, [src]);
+
+  useEffect(() => {
+    console.log('🖼️ DelayedImage useEffect triggered:', { src, retryCount });
+
+    if (!src) {
+      console.log('⚠️ No src, skipping load');
+      return;
+    }
 
     let mounted = true;
     let retryTimeout: NodeJS.Timeout;
 
     const loadImage = () => {
+      console.log('🔄 Attempting to load image:', src);
       const img = new Image();
       
       img.onload = () => {
+        console.log('✅ Image loaded successfully!', src);
         if (mounted) {
           setImageSrc(src);
           setIsLoading(false);
@@ -41,14 +57,14 @@ export default function DelayedImage({
         if (!mounted) return;
         
         if (retryCount < maxRetries) {
-          console.log(`Image not ready yet, retry ${retryCount + 1}/${maxRetries} in ${retryDelay/1000}s...`);
+          console.log(`❌ Image not ready yet, retry ${retryCount + 1}/${maxRetries} in ${retryDelay/1000}s...`);
           retryTimeout = setTimeout(() => {
             if (mounted) {
               setRetryCount(prev => prev + 1);
             }
           }, retryDelay);
         } else {
-          console.error('Image failed to load after max retries');
+          console.error('💀 Image failed to load after max retries');
           setIsLoading(false);
           setError(true);
         }

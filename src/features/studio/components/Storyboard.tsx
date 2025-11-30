@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Scene } from '@/types';
 import { ChevronLeft, ChevronRight, RefreshCw, Edit3, Wand2 } from 'lucide-react';
 import DelayedImage from '@/components/DelayedImage';

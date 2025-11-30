@@ -35,6 +35,9 @@ export default function StudioPage() {
   const [editedDescription, setEditedDescription] = useState('');
   const [modifyPrompt, setModifyPrompt] = useState('');
   const [showModifyInput, setShowModifyInput] = useState(false);
+  
+  // Track which scenes have been rendered (to force update new ones)
+  const [renderedScenes, setRenderedScenes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!projectData) {
@@ -164,9 +167,27 @@ export default function StudioPage() {
 
     setIsGenerating(false);
     setGenerationProgress({ current: 0, total: 0 });
-    setActiveTab('standard'); // Return to standard tab to show results
+    
+    // For newly generated scenes, force update using same mechanism as manual regeneration
+    for (const mode of ['standard', 'experimental'] as const) {
+      for (const scene of projectData[mode]) {
+        if (scene.imageUrl && !renderedScenes.has(scene.id)) {
+          // Mark as rendered
+          setRenderedScenes(prev => new Set(prev).add(scene.id));
+          
+          // Force update (same as handleRegenerateImage but without actual regeneration)
+          updateScene(mode, scene.id, { isLoading: true });
+          await new Promise(resolve => setTimeout(resolve, 50));
+          updateScene(mode, scene.id, { imageUrl: scene.imageUrl, isLoading: false });
+        }
+      }
+    }
+    
+    setTimeout(() => {
+      setActiveTab('standard');
+    }, 100);
   };
-
+  
   const handleRegenerateImage = async () => {
     if (!currentScene) return;
     
@@ -545,7 +566,6 @@ This archive contains:
                   ) : currentScene.imageUrl ? (
                     <>
                       <DelayedImage
-                        key={currentScene.imageUrl}
                         src={currentScene.imageUrl}
                         alt={currentScene.title}
                         className="w-full h-full object-cover"
