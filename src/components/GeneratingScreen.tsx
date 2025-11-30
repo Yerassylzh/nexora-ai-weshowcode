@@ -1,5 +1,5 @@
 import React from 'react';
-import { Film, Sparkles } from 'lucide-react';
+import { Clapperboard, Sparkles } from 'lucide-react';
 
 interface GeneratingScreenProps {
   currentScene: number;
@@ -8,82 +8,113 @@ interface GeneratingScreenProps {
 }
 
 export default function GeneratingScreen({ currentScene, totalScenes, mode }: GeneratingScreenProps) {
+  const progress = (currentScene / totalScenes) * 100;
+  
   return (
-    <div className="fixed inset-0 z-50 bg-[#0A0A0A] flex items-center justify-center film-grain">
-      {/* Spotlight effect */}
-      <div className="absolute inset-0 bg-gradient-radial from-[#3B82F6]/10 via-transparent to-transparent" style={{ animation: 'spotlight 3s ease-in-out infinite' }} />
-      
+    <div className="fixed inset-0 z-50 bg-gradient-to-br from-[#0A0A0A] via-[#1a1a2e] to-[#16213e] flex items-center justify-center overflow-hidden">
+      {/* Animated background grid */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute inset-0" style={{
+          backgroundImage: 'linear-gradient(#3B82F6 1px, transparent 1px), linear-gradient(90deg, #3B82F6 1px, transparent 1px)',
+          backgroundSize: '50px 50px',
+          animation: 'grid-move 20s linear infinite'
+        }} />
+      </div>
+
+      {/* Glowing orbs */}
+      <div className="absolute top-20 left-20 w-64 h-64 bg-[#3B82F6]/20 rounded-full blur-3xl animate-pulse" />
+      <div className="absolute bottom-20 right-20 w-96 h-96 bg-[#60A5FA]/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+
       {/* Main content */}
-      <div className="relative z-10 flex flex-col items-center gap-8 md:gap-12 px-4">
-        {/* Clapperboard Icon */}
-        <div className="relative">
-          {/* Pulse rings */}
-          <div className="absolute inset-0 -m-12">
-            <div className="w-48 h-48 border-2 border-[#3B82F6]/30 rounded-full" style={{ animation: 'pulse-ring 2s ease-in-out infinite' }} />
-            <div className="absolute inset-0 w-48 h-48 border-2 border-[#60A5FA]/20 rounded-full" style={{ animation: 'pulse-ring 2s ease-in-out infinite 1s' }} />
-          </div>
-          
-          {/* Clapperboard */}
-          <div className="relative bg-neutral-900 border-4 border-white w-32 h-32 md:w-40 md:h-40 rounded-lg flex items-center justify-center" style={{ transformStyle: 'preserve-3d' }}>
-            <div className="absolute -top-6 md:-top-8 left-0 right-0 h-6 md:h-8 bg-white border-4 border-black" style={{ animation: 'clapperSlap 2s ease-in-out infinite', transformOrigin: 'bottom' }}>
-              <div className="flex h-full">
-                <div className="flex-1 bg-black" />
-                <div className="flex-1 bg-white" />
-                <div className="flex-1 bg-black" />
-                <div className="flex-1 bg-white" />
-                <div className="flex-1 bg-black" />
-              </div>
+      <div className="relative z-10 max-w-2xl w-full px-6">
+        {/* Icon */}
+        <div className="flex justify-center mb-8">
+          <div className="relative">
+            <div className="absolute inset-0 bg-[#3B82F6]/30 rounded-full blur-xl animate-pulse" />
+            <div className="relative bg-gradient-to-br from-[#3B82F6] to-[#60A5FA] p-6 rounded-full">
+              <Clapperboard className="w-16 h-16 text-white" strokeWidth={1.5} />
             </div>
-            <Film className="w-16 h-16 md:w-20 md:h-20 text-[#3B82F6]" />
           </div>
         </div>
 
-        {/* Text */}
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center gap-2 md:gap-3">
-            <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-[#3B82F6] animate-pulse" />
-            <h2 className="text-2xl md:text-4xl font-bold text-white">
+        {/* Title */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <Sparkles className="w-6 h-6 text-[#60A5FA] animate-pulse" />
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-white via-[#60A5FA] to-white bg-clip-text text-transparent">
               Создание изображений
-            </h2>
-            <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-[#60A5FA] animate-pulse" style={{ animationDelay: '0.5s' }} />
+            </h1>
+            <Sparkles className="w-6 h-6 text-[#60A5FA] animate-pulse" style={{ animationDelay: '0.5s' }} />
           </div>
-          
-          <p className="text-lg md:text-xl text-neutral-400">
+          <p className="text-lg text-neutral-400">
             {mode === 'standard' ? 'Стандартный' : 'Экспериментальный'} режим
           </p>
-
-          {/* Progress */}
-          <div className="mt-6 md:mt-8 space-y-3">
-            <div className="flex items-center justify-center gap-2 text-sm md:text-base text-neutral-500">
-              <span className="text-[#3B82F6] font-semibold text-lg md:text-xl">
-                {currentScene}
-              </span>
-              <span>/</span>
-              <span>{totalScenes}</span>
-            </div>
-            
-            {/* Progress bar */}
-            <div className="w-64 md:w-96 h-2 bg-neutral-800 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] transition-all duration-500 ease-out"
-                style={{ width: `${(currentScene / totalScenes) * 100}%` }}
-              />
-            </div>
-          </div>
         </div>
 
-        {/* Film strip decoration */}
-        <div className="absolute bottom-0 left-0 right-0 h-24 overflow-hidden opacity-20">
-          <div className="flex gap-2" style={{ animation: 'filmRoll 10s linear infinite' }}>
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div key={i} className="flex-shrink-0 w-16 h-20 bg-neutral-700 border-2 border-neutral-600 rounded" />
-            ))}
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div key={`dup-${i}`} className="flex-shrink-0 w-16 h-20 bg-neutral-700 border-2 border-neutral-600 rounded" />
-            ))}
+        {/* Progress section */}
+        <div className="space-y-6">
+          {/* Scene counter */}
+          <div className="flex items-center justify-center gap-4">
+            <div className="text-center">
+              <div className="text-6xl font-bold bg-gradient-to-r from-[#3B82F6] to-[#60A5FA] bg-clip-text text-transparent">
+                {currentScene}
+              </div>
+              <div className="text-sm text-neutral-500 mt-1">Текущая</div>
+            </div>
+            <div className="text-3xl text-neutral-600">/</div>
+            <div className="text-center">
+              <div className="text-6xl font-bold text-neutral-700">
+                {totalScenes}
+              </div>
+              <div className="text-sm text-neutral-500 mt-1">Всего</div>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="relative">
+            <div className="h-3 bg-neutral-800 rounded-full overflow-hidden border border-neutral-700">
+              <div 
+                className="h-full bg-gradient-to-r from-[#3B82F6] via-[#60A5FA] to-[#3B82F6] transition-all duration-500 rounded-full relative"
+                style={{ 
+                  width: `${progress}%`,
+                  backgroundSize: '200% 100%',
+                  animation: 'shimmer 2s infinite linear'
+                }}
+              >
+                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+              </div>
+            </div>
+            <div className="flex justify-between mt-2 text-xs text-neutral-500">
+              <span>{Math.round(progress)}%</span>
+              <span>Осталось: {totalScenes - currentScene}</span>
+            </div>
+          </div>
+
+          {/* Status message */}
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 px-6 py-3 bg-neutral-800/50 backdrop-blur-sm border border-neutral-700 rounded-full">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-[#3B82F6] rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-[#60A5FA] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                <div className="w-2 h-2 bg-[#3B82F6] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+              </div>
+              <span className="text-sm text-neutral-300">Генерация изображения...</span>
+            </div>
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes grid-move {
+          0% { transform: translate(0, 0); }
+          100% { transform: translate(50px, 50px); }
+        }
+        
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
     </div>
   );
 }

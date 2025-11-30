@@ -6,6 +6,7 @@ import { useProject } from '@/context/ProjectContext';
 import { generateImage } from '@/lib/api';
 import { MOCK_OUTLINES } from '@/lib/mockData';
 import GeneratingScreen from '@/components/GeneratingScreen';
+import DelayedImage from '@/components/DelayedImage';
 import { Scene, ActiveTab } from '@/types';
 import { ChevronLeft, ChevronRight, Sparkles, Download, Plus, Trash2, RefreshCw, Edit3, Wand2 } from 'lucide-react';
 
@@ -22,7 +23,7 @@ export default function StudioPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
   
-  // Regeneration settings
+  // Regeneration settings - will be initialized from projectData
   const [regTopic, setRegTopic] = useState('');
   const [regSceneCount, setRegSceneCount] = useState(3);
   const [regStyle, setRegStyle] = useState('Реализм');
@@ -39,8 +40,9 @@ export default function StudioPage() {
     if (!projectData) {
       router.push('/');
     } else {
+      // Initialize regeneration settings from project data
       setRegTopic(projectData.topic);
-      setRegSceneCount(projectData.sceneCount);
+      setRegSceneCount(projectData.sceneCount); // This should set to 1 if user selected 1
       setRegStyle(projectData.style);
       setHasUnsavedChanges(false);
     }
@@ -57,14 +59,18 @@ export default function StudioPage() {
   }, [regTopic, regSceneCount, regStyle, projectData]);
 
   useEffect(() => {
-    if (currentScene) {
-      setEditedTitle(currentScene.title);
-      setEditedDescription(currentScene.description);
-      setIsEditingText(false);
-      setModifyPrompt('');
-      setShowModifyInput(false);
+    if (projectData) {
+      const currentScenes = projectData[activeTab];
+      const scene = currentScenes[currentSceneIndex];
+      if (scene) {
+        setEditedTitle(scene.title);
+        setEditedDescription(scene.description);
+        setIsEditingText(false);
+        setModifyPrompt('');
+        setShowModifyInput(false);
+      }
     }
-  }, [currentSceneIndex, activeTab]);
+  }, [currentSceneIndex, activeTab, projectData]);
 
   if (!projectData) {
     return null;
@@ -120,7 +126,7 @@ export default function StudioPage() {
     setViewMode('storyboard');
     setIsGenerating(true);
 
-    // Generate images for both modes
+    // Generate images for BOTH standard and experimental modes
     const allScenes = [...projectData.standard, ...projectData.experimental];
     setGenerationProgress({ current: 0, total: allScenes.length });
 
@@ -171,12 +177,12 @@ export default function StudioPage() {
   const handleUpdateTextAndImage = async () => {
     if (!currentScene) return;
 
-    // Update text
+    // Update ALL fields including text and loading state in ONE call
     updateScene(activeTab, currentScene.id, { 
       title: editedTitle,
       description: editedDescription,
-      visualPrompt: editedDescription, // Use description as new visual prompt
-      isLoading: true 
+      visualPrompt: editedDescription, // Use description as visual prompt
+      isLoading: true // Start loading
     });
     
     setIsEditingText(false);
@@ -200,12 +206,15 @@ export default function StudioPage() {
     setShowModifyInput(false);
     
     try {
-      // Pass existing image and modification prompt
-      const { imageUrl } = await generateImage(
-        modifyPrompt, 
-        projectData.style, 
-        currentScene.imageUrl // Pass existing image for modification
-      );
+      // Merge original visualPrompt with modification prompt
+      // This simulates img2img by creating a detailed combined prompt
+      const combinedPrompt = `${currentScene.visualPrompt}, ${modifyPrompt}`;
+      
+      console.log('Original prompt:', currentScene.visualPrompt);
+      console.log('Modification:', modifyPrompt);
+      console.log('Combined prompt:', combinedPrompt);
+      
+      const { imageUrl } = await generateImage(combinedPrompt, projectData.style);
       updateScene(activeTab, currentScene.id, { 
         imageUrl,
         isLoading: false 
@@ -217,15 +226,91 @@ export default function StudioPage() {
     }
   };
 
-  const handleExport = () => {
-    const dataStr = JSON.stringify(projectData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `ai-director-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const handleExport = async () => {
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    
+    setIsGenerating(true);
+    
+    try {
+      // Helper function to wait for image to be available
+      const waitForImage = async (url: string, maxRetries = 30): Promise<Blob> => {
+        for (let i = 0; i < maxRetries; i++) {
+          try {
+            const response = await fetch(url, { mode: 'cors' });
+            if (response.ok) {
+              return await response.blob();
+            }
+          } catch (error) {
+            console.log(`Image not ready yet (attempt ${i + 1}/${maxRetries}), retrying in 5s...`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+        }
+        throw new Error(`Image failed to load after ${maxRetries} attempts`);
+      };
+
+      // Create project metadata
+      const projectMeta = {
+        topic: projectData.topic,
+        style: projectData.style,
+        sceneCount: projectData.sceneCount,
+        exportedAt: new Date().toISOString(),
+        standard: projectData.standard.map(({ id, isLoading, ...scene }) => scene),
+        experimental: projectData.experimental.map(({ id, isLoading, ...scene }) => scene),
+      };
+      
+      zip.file('project.json', JSON.stringify(projectMeta, null, 2));
+
+      // Create README
+      const readme = `AI Director Project Export
+      
+Topic: ${projectData.topic}
+Style: ${projectData.style}
+Scenes: ${projectData.sceneCount}
+Exported: ${new Date().toLocaleString()}
+
+This archive contains:
+- project.json: All scene metadata and prompts
+- standard/: ${projectData.standard.length} standard version images
+- experimental/: ${projectData.experimental.length} experimental version images
+`;
+      zip.file('README.txt', readme);
+
+      // Download and add images for both modes
+      for (const mode of ['standard', 'experimental'] as const) {
+        const scenes = projectData[mode];
+        const folder = zip.folder(mode)!;
+        
+        for (let i = 0; i < scenes.length; i++) {
+          const scene = scenes[i];
+          if (scene.imageUrl) {
+            try {
+              console.log(`Fetching ${mode} scene ${i + 1}...`);
+              const imageBlob = await waitForImage(scene.imageUrl);
+              folder.file(`scene-${String(i + 1).padStart(2, '0')}.jpg`, imageBlob);
+            } catch (error) {
+              console.error(`Failed to fetch image for ${mode} scene ${i + 1}:`, error);
+              // Continue with other images even if one fails
+            }
+          }
+        }
+      }
+
+      // Generate and download ZIP
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ai-director-${Date.now()}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Не удалось экспортировать проект. Проверьте консоль для деталей.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const nextScene = () => {
@@ -332,15 +417,32 @@ export default function StudioPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-neutral-400 mb-2">Количество сцен:</label>
-                  <select
+                  <input
+                    type="text"
                     value={regSceneCount}
-                    onChange={(e) => setRegSceneCount(Number(e.target.value))}
-                    className="px-3 py-2 bg-[#0A0A0A] border border-neutral-700 rounded-lg text-sm text-white focus:border-[#3B82F6] outline-none"
-                  >
-                    {SCENE_OPTIONS.map((count) => (
-                      <option key={count} value={count}>{count}</option>
-                    ))}
-                  </select>
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      // Allow empty string or valid numbers 1-10
+                      if (val === '') {
+                        setRegSceneCount('' as any); // Allow empty temporarily
+                      } else if (/^\d+$/.test(val)) {
+                        const num = parseInt(val);
+                        if (num <= 10) {
+                          setRegSceneCount(num);
+                        }
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Validate and fix on blur
+                      const val = e.target.value;
+                      if (val === '' || parseInt(val) < 1) {
+                        setRegSceneCount(1);
+                      } else if (parseInt(val) > 10) {
+                        setRegSceneCount(10);
+                      }
+                    }}
+                    className="w-20 px-3 py-2 bg-[#0A0A0A] border border-neutral-700 rounded-lg text-sm text-white text-center focus:border-[#3B82F6] outline-none"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-neutral-400 mb-2">Стиль:</label>
@@ -432,7 +534,8 @@ export default function StudioPage() {
                     </div>
                   ) : currentScene.imageUrl ? (
                     <>
-                      <img
+                      <DelayedImage
+                        key={`${activeTab}-${currentScene.id}-${currentScene.imageUrl}`}
                         src={currentScene.imageUrl}
                         alt={currentScene.title}
                         className="w-full h-full object-cover"

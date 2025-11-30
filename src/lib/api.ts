@@ -12,15 +12,13 @@ export async function generateOutline(topic: string, style: string, sceneCount: 
   return response.json();
 }
 
-export async function generateImage(prompt: string, style: string, existingImage?: string) {
+export async function generateImage(prompt: string, style: string) {
   const response = await fetch('/api/generate-image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       prompt, 
-      style,
-      modifyPrompt: existingImage ? prompt : undefined,
-      existingImage 
+      style
     }),
   });
 

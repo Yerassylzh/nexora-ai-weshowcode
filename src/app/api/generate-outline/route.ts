@@ -32,13 +32,15 @@ Generate TWO different versions of the same story:
 For each version, create exactly ${sceneCount} scenes.
 
 For each scene, provide:
-- title: A compelling scene title
-- description: What happens in this scene (2-3 sentences)
-- visualPrompt: A detailed prompt optimized for image generation (include camera angles, lighting, mood, colors)
-- tags: Array of 3-5 technical tags (e.g., "Wide Shot", "Golden Hour", "Low Angle", "Neon Lighting", "ISO 800")
-- directorsNote: Explain WHY you chose this specific camera angle, lighting, or composition (1-2 sentences)
+- title: A compelling scene title (in Russian)
+- description: What happens in this scene (2-3 sentences, in Russian)
+- visualPrompt: **CRITICAL - This MUST be in ENGLISH** as it will be used for Stable Diffusion image generation. Write a detailed, technical prompt optimized for SD with specific details about: camera angle (e.g., "wide shot", "close-up", "dutch angle"), lighting (e.g., "golden hour", "neon lighting", "rim light"), composition, mood, colors, atmosphere, technical settings (e.g., "35mm lens", "f/1.8", "ISO 800"). Example: "Wide shot of futuristic cityscape at sunset, neon lights reflecting on wet streets, cinematic lighting, 8k, photorealistic, volumetric fog"
+- tags: Array of 3-5 technical tags (in English, e.g., "Wide Shot", "Golden Hour", "Low Angle", "Neon Lighting", "ISO 800")
+- directorsNote: Explain WHY you chose this specific camera angle, lighting, or composition (1-2 sentences, in Russian)
 
 Visual style context: ${style}
+
+**IMPORTANT**: The visualPrompt field is the ONLY field that must be in English. All other fields (title, description, directorsNote) must be in Russian.
 
 Return ONLY a valid JSON object with this exact structure:
 {

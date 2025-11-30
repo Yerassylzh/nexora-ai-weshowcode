@@ -49,29 +49,87 @@ export default function HomePage() {
     }
   };
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string;
-        const data = JSON.parse(content);
+    try {
+      if (file.name.endsWith('.zip')) {
+        // Handle ZIP import
+        const JSZip = (await import('jszip')).default;
+        const zip = await JSZip.loadAsync(file);
         
-        // Validate that it's a project data file
-        if (data.topic && data.style && data.standard && data.experimental) {
-          setProjectData(data);
-          router.push('/studio');
-        } else {
-          alert('Неверный формат файла. Пожалуйста, загрузите экспортированный проект.');
+        // Read project.json
+        const projectFile = zip.file('project.json');
+        if (!projectFile) {
+          throw new Error('Invalid ZIP: project.json not found');
         }
-      } catch (error) {
-        console.error('Failed to import file:', error);
-        alert('Не удалось импортировать файл. Убедитесь, что это правильный JSON файл.');
+        
+        const projectJson = await projectFile.async('text');
+        const projectMeta = JSON.parse(projectJson);
+        
+        // Helper to convert blob to data URL
+        const blobToDataURL = (blob: Blob): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        };
+        
+        // Load images for both modes
+        const loadImages = async (mode: 'standard' | 'experimental') => {
+          const scenes = projectMeta[mode];
+          for (let i = 0; i < scenes.length; i++) {
+            const imagePath = `${mode}/scene-${String(i + 1).padStart(2, '0')}.jpg`;
+            const imageFile = zip.file(imagePath);
+            if (imageFile) {
+              const blob = await imageFile.async('blob');
+              const dataURL = await blobToDataURL(blob);
+              scenes[i].imageUrl = dataURL;
+              scenes[i].id = `${Date.now()}-${i}`;
+              scenes[i].isLoading = false;
+            } else {
+              scenes[i].imageUrl = null;
+              scenes[i].id = `${Date.now()}-${i}`;
+              scenes[i].isLoading = false;
+            }
+          }
+        };
+        
+        await loadImages('standard');
+        await loadImages('experimental');
+        
+        // Set project data and navigate to storyboard view
+        setProjectData(projectMeta);
+        router.push('/studio?view=storyboard');
+        
+      } else {
+        // Handle JSON import (backward compatibility)
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const content = e.target?.result as string;
+            const data = JSON.parse(content);
+            
+            if (data.topic && data.style && data.standard && data.experimental) {
+              setProjectData(data);
+              router.push('/studio?view=storyboard');
+            } else {
+              alert('Неверный формат файла. Пожалуйста, загрузите экспортированный проект.');
+            }
+          } catch (error) {
+            console.error('Failed to parse JSON:', error);
+            alert('Не удалось импортировать файл. Убедитесь, что это правильный JSON файл.');
+          }
+        };
+        reader.readAsText(file);
       }
-    };
-    reader.readAsText(file);
+    } catch (error) {
+      console.error('Failed to import file:', error);
+      alert('Не удалось импортировать файл. Убедитесь, что это правильный файл проекта.');
+    }
   };
 
   return (
@@ -100,7 +158,7 @@ export default function HomePage() {
               type="file"
               ref={fileInputRef}
               onChange={handleImport}
-              accept=".json"
+              accept=".json,.zip"
               className="hidden"
             />
             <button
@@ -128,20 +186,49 @@ export default function HomePage() {
               <label className="block text-sm font-medium text-neutral-300 mb-2 md:mb-3">
                 Количество сцен
               </label>
-              <div className="flex gap-2 md:gap-3">
+              <div className="flex gap-2 md:gap-3 flex-wrap">
                 {SCENE_OPTIONS.map((count) => (
                   <button
                     key={count}
                     onClick={() => setSceneCount(count)}
-                    className={`flex-1 md:flex-none px-4 md:px-6 py-2 md:py-3 rounded-full text-xs md:text-sm font-medium transition-all duration-200 ${
+                    className={`min-w-[60px] md:min-w-[80px] px-4 md:px-6 py-2 md:py-3 rounded-full text-xs md:text-sm font-medium transition-all duration-200 ${
                       sceneCount === count
                         ? 'bg-[#3B82F6] text-white shadow-lg shadow-[#3B82F6]/30'
                         : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white border border-neutral-700'
                     }`}
                   >
-                    {count} {count === 1 ? 'сцена' : count < 5 ? 'сцены' : 'сцен'}
+                    {count}
                   </button>
                 ))}
+                <div className="flex items-center gap-2 flex-1 md:flex-none">
+                  <input
+                    type="text"
+                    value={sceneCount}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      // Allow empty string or valid numbers 1-10
+                      if (val === '') {
+                        setSceneCount('' as any); // Allow empty temporarily
+                      } else if (/^\d+$/.test(val)) {
+                        const num = parseInt(val);
+                        if (num <= 10) {
+                          setSceneCount(num);
+                        }
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Validate and fix on blur
+                      const val = e.target.value;
+                      if (val === '' || parseInt(val) < 1) {
+                        setSceneCount(1);
+                      } else if (parseInt(val) > 10) {
+                        setSceneCount(10);
+                      }
+                    }}
+                    className="w-20 px-3 py-2 md:py-3 bg-neutral-800 border border-neutral-700 rounded-full text-center text-xs md:text-sm text-white focus:border-[#3B82F6] outline-none"
+                  />
+                  <span className="text-xs md:text-sm text-neutral-500">свой</span>
+                </div>
               </div>
             </div>
 

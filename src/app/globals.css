@@ -12,7 +12,7 @@ body {
 /* Dark scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3B82F6 #171717;
+  scrollbar-color: #3B82F6 #0A0A0A;
 }
 
 *::-webkit-scrollbar {
@@ -21,7 +21,7 @@ body {
 }
 
 *::-webkit-scrollbar-track {
-  background: #171717;
+  background: #0A0A0A;
 }
 
 *::-webkit-scrollbar-thumb {
