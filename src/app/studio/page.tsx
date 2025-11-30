@@ -164,6 +164,7 @@ export default function StudioPage() {
 
     setIsGenerating(false);
     setGenerationProgress({ current: 0, total: 0 });
+    setActiveTab('standard'); // Return to standard tab to show results
   };
 
   const handleRegenerateImage = async () => {
