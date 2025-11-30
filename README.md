@@ -77,7 +77,7 @@ npm run dev
 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
 - **AI**: 
-  - Google Gemini 2.0 Flash (генерация сценариев и описаний сцен)
+  - Google Gemini 2.5 Flash (генерация сценариев и описаний сцен)
   - ModelsLab Flux (генерация изображений раскадровки)
 - **State**: React Context API
 - **Export**: JSZip для создания архивов
